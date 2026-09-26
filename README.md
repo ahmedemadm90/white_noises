@@ -11,5 +11,8 @@
 - حفظ المزيج تلقائيًا، وزر المسافة للتشغيل/الإيقاف
 - كل الأصوات مولّدة بالـ Web Audio API، فلا حاجة لملفات صوتية وتعمل بلا انقطاع
 
+## الرابط
+https://ahmedemadm90.github.io/white_noises/
+
 ## التشغيل
 افتح `index.html` في المتصفح، أو فعّل **GitHub Pages** من إعدادات المستودع (Settings → Pages → Branch).
