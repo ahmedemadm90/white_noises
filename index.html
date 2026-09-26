@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>أصوات الطبيعة للتركيز</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root { --fg:#fff; --card:rgba(0,0,0,.35); --accent:#7fd4a8; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; font-family:'Cairo',system-ui,sans-serif; color:var(--fg); background:#0b1a14; }
+  #bg { position:fixed; inset:0; z-index:-2; transition:background 1.5s ease; background-size:400% 400% !important; animation:drift 30s ease infinite; }
+  #fx { position:fixed; inset:0; z-index:-1; pointer-events:none; }
+  @keyframes drift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+  main { max-width:900px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { text-align:center; margin:8px 0 4px; font-size:clamp(1.6rem,4vw,2.4rem); text-shadow:0 2px 12px rgba(0,0,0,.5); }
+  p.sub { text-align:center; opacity:.85; margin:0 0 20px; }
+  .top { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; align-items:center; margin-bottom:20px; }
+  button, select { font:inherit; color:var(--fg); background:var(--card); border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:8px 18px; cursor:pointer; backdrop-filter:blur(8px); }
+  button:hover { background:rgba(255,255,255,.15); }
+  #play { font-size:1.2rem; padding:10px 28px; background:var(--accent); color:#0b1a14; font-weight:700; border:none; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:14px; }
+  .card { background:var(--card); border:1px solid rgba(255,255,255,.15); border-radius:18px; padding:16px; backdrop-filter:blur(10px); transition:.3s; cursor:pointer; user-select:none; }
+  .card.on { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset; }
+  .card .ico { font-size:2.2rem; }
+  .card .name { font-weight:700; margin:4px 0 10px; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .timer { opacity:.9; }
+  footer { text-align:center; opacity:.6; font-size:.85rem; margin-top:28px; }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<canvas id="fx"></canvas>
+<main>
+  <h1>🌿 أصوات الطبيعة للتركيز</h1>
+  <p class="sub">اختر صوتًا أو امزج عدة أصوات — تعمل بشكل مستمر بلا انقطاع</p>
+  <div class="top">
+    <button id="play">▶ تشغيل</button>
+    <label>الصوت العام <input id="master" type="range" min="0" max="1" step="0.01" value="0.8" style="width:120px;vertical-align:middle"></label>
+    <select id="preset">
+      <option value="">مزيج جاهز…</option>
+      <option value="rain:.7,thunder:.3">عاصفة ممطرة</option>
+      <option value="waves:.8,wind:.2,birds:.2">شاطئ البحر</option>
+      <option value="stream:.6,birds:.5,wind:.2">غابة الصباح</option>
+      <option value="fire:.7,night:.4,wind:.2">ليلة المخيم</option>
+      <option value="white:.5">ضوضاء بيضاء</option>
+      <option value="brown:.6">ضوضاء بنية</option>
+    </select>
+    <select id="timer" class="timer">
+      <option value="0">بدون مؤقت</option>
+      <option value="25">٢٥ دقيقة (بومودورو)</option>
+      <option value="45">٤٥ دقيقة</option>
+      <option value="60">ساعة</option>
+      <option value="120">ساعتان</option>
+    </select>
+    <span id="left"></span>
+  </div>
+  <div class="grid" id="grid"></div>
+  <footer>جميع الأصوات مولّدة داخل المتصفح بواسطة Web Audio — لا تحتاج إنترنت بعد التحميل.</footer>
+</main>
+<script>
+const SOUNDS = [
+  {id:'rain',   name:'مطر',          ico:'🌧️', bg:'linear-gradient(135deg,#1c2b3a,#34495e,#2c3e50,#1a252f)', fx:'rain'},
+  {id:'thunder',name:'رعد',          ico:'⛈️', bg:'linear-gradient(135deg,#0f0f1e,#2b2d42,#1b1b2f,#3a3f5c)', fx:'rain'},
+  {id:'waves',  name:'أمواج البحر',  ico:'🌊', bg:'linear-gradient(135deg,#0b3d5c,#1f7a8c,#0e5e6f,#3fa7b5)', fx:'bubbles'},
+  {id:'wind',   name:'رياح',         ico:'🍃', bg:'linear-gradient(135deg,#5b6d5b,#8fa98f,#4a5a4a,#a3b18a)', fx:'leaves'},
+  {id:'stream', name:'جدول ماء',     ico:'💧', bg:'linear-gradient(135deg,#134e3a,#2d8a6a,#1b5e4a,#56ab91)', fx:'bubbles'},
+  {id:'birds',  name:'عصافير',       ico:'🐦', bg:'linear-gradient(135deg,#2e5e3e,#6a9955,#a7c957,#386641)', fx:'leaves'},
+  {id:'fire',   name:'نار المخيم',   ico:'🔥', bg:'linear-gradient(135deg,#2b0f06,#7f2a0a,#c0511a,#401505)', fx:'embers'},
+  {id:'night',  name:'ليل وصراصير',  ico:'🌙', bg:'linear-gradient(135deg,#050a1f,#101b3d,#1c2757,#0a0f2a)', fx:'stars'},
+  {id:'white',  name:'ضوضاء بيضاء',  ico:'⚪', bg:'linear-gradient(135deg,#3a3a3a,#5c5c5c,#2e2e2e,#707070)', fx:'stars'},
+  {id:'brown',  name:'ضوضاء بنية',   ico:'🟤', bg:'linear-gradient(135deg,#2a1d14,#4e3629,#3b2a1f,#6b4f3a)', fx:'stars'},
+];
+let ctx, master, playing=false, lastFx='stars';
+const state = {}; // id -> {vol, gain, built}
+
+function noiseBuffer(type){
+  const len = ctx.sampleRate*4, buf = ctx.createBuffer(2,len,ctx.sampleRate);
+  for(let c=0;c<2;c++){
+    const d=buf.getChannelData(c); let last=0,b0=0,b1=0,b2=0;
+    for(let i=0;i<len;i++){
+      const w=Math.random()*2-1;
+      if(type==='brown'){ last=(last+0.02*w)/1.02; d[i]=last*3.5; }
+      else if(type==='pink'){ b0=0.997*b0+w*0.029591; b1=0.985*b1+w*0.032534; b2=0.95*b2+w*0.048056; d[i]=(b0+b1+b2+w*0.05)*1.2; }
+      else d[i]=w;
+    }
+  }
+  return buf;
+}
+const bufs={};
+function src(type){ const s=ctx.createBufferSource(); s.buffer=bufs[type]||(bufs[type]=noiseBuffer(type)); s.loop=true; s.start(); return s; }
+function filt(type,f,q=1){ const b=ctx.createBiquadFilter(); b.type=type; b.frequency.value=f; b.Q.value=q; return b; }
+function lfo(freq,amount,target,offset){ const o=ctx.createOscillator(), g=ctx.createGain(); o.frequency.value=freq; g.gain.value=amount; o.connect(g).connect(target); if(offset!==undefined) target.value=offset; o.start(); }
+
+const BUILDERS = {
+  white(out){ src('white').connect(filt('lowpass',9000)).connect(scale(.35,out)); },
+  brown(out){ src('brown').connect(scale(1,out)); },
+  rain(out){
+    src('pink').connect(filt('highpass',400)).connect(filt('lowpass',7000)).connect(scale(.9,out));
+    // droplets
+    const drop=()=>{ if(!ctx) return; const t=ctx.currentTime; const o=ctx.createOscillator(), g=ctx.createGain();
+      o.frequency.setValueAtTime(1500+Math.random()*3000,t); o.frequency.exponentialRampToValueAtTime(400,t+.03);
+      g.gain.setValueAtTime(.04*Math.random(),t); g.gain.exponentialRampToValueAtTime(.0001,t+.04);
+      o.connect(g).connect(out); o.start(t); o.stop(t+.05); setTimeout(drop,20+Math.random()*80); };
+    drop();
+  },
+  thunder(out){
+    const rumble=()=>{ const t=ctx.currentTime, s=ctx.createBufferSource(); s.buffer=bufs.brown||(bufs.brown=noiseBuffer('brown'));
+      const g=ctx.createGain(), f=filt('lowpass',180+Math.random()*200); g.gain.setValueAtTime(0,t);
+      g.gain.linearRampToValueAtTime(1.6,t+.3+Math.random()); g.gain.exponentialRampToValueAtTime(.001,t+6+Math.random()*4);
+      s.connect(f).connect(g).connect(out); s.start(t,Math.random()*3); s.stop(t+11);
+      if(state.thunder?.vol>0 && playing) flash(); setTimeout(rumble,8000+Math.random()*15000); };
+    const g=scale(.25,out); src('brown').connect(filt('lowpass',120)).connect(g); setTimeout(rumble,1500);
+  },
+  waves(out){
+    const g=ctx.createGain(); g.gain.value=0; src('pink').connect(filt('lowpass',1200)).connect(g).connect(out);
+    lfo(0.09,.45,g.gain,.55);
+  },
+  wind(out){
+    const f=filt('bandpass',500,.8), g=ctx.createGain(); src('pink').connect(f).connect(g).connect(scale(1.4,out));
+    lfo(0.05,300,f.frequency,550); lfo(0.13,.35,g.gain,.65);
+  },
+  stream(out){
+    const f=filt('bandpass',1800,.6); src('white').connect(f).connect(scale(.4,out)); lfo(0.7,500,f.frequency,1800);
+    const f2=filt('bandpass',900,2); src('pink').connect(f2).connect(scale(.5,out)); lfo(1.3,300,f2.frequency,900);
+  },
+  birds(out){
+    const chirp=()=>{ const t=ctx.currentTime, n=2+Math.floor(Math.random()*5), base=2200+Math.random()*2500;
+      for(let i=0;i<n;i++){ const o=ctx.createOscillator(), g=ctx.createGain(), s=t+i*.12;
+        o.frequency.setValueAtTime(base,s); o.frequency.exponentialRampToValueAtTime(base*(Math.random()>.5?1.5:.7),s+.08);
+        g.gain.setValueAtTime(0,s); g.gain.linearRampToValueAtTime(.08,s+.01); g.gain.exponentialRampToValueAtTime(.0001,s+.1);
+        o.connect(g).connect(out); o.start(s); o.stop(s+.12); }
+      setTimeout(chirp,600+Math.random()*3500); };
+    chirp();
+  },
+  fire(out){
+    src('brown').connect(filt('lowpass',600)).connect(scale(.6,out));
+    const crackle=()=>{ const t=ctx.currentTime, s=ctx.createBufferSource(); s.buffer=bufs.white||(bufs.white=noiseBuffer('white'));
+      const g=ctx.createGain(), f=filt('highpass',1000+Math.random()*3000); g.gain.setValueAtTime(.3+Math.random()*.6,t); g.gain.exponentialRampToValueAtTime(.001,t+.01+Math.random()*.03);
+      s.connect(f).connect(g).connect(out); s.start(t,Math.random()*3); s.stop(t+.05); setTimeout(crackle,15+Math.random()*(Math.random()>.8?400:90)); };
+    crackle();
+  },
+  night(out){
+    const o=ctx.createOscillator(), g=ctx.createGain(), am=ctx.createGain(); o.frequency.value=4400; o.type='triangle';
+    g.gain.value=0; o.connect(g).connect(am).connect(out); lfo(28,.04,g.gain,.04); am.gain.value=0; lfo(0.4,.5,am.gain,.5); o.start();
+    src('pink').connect(filt('lowpass',400)).connect(scale(.25,out));
+  },
+};
+function scale(v,out){ const g=ctx.createGain(); g.gain.value=v; g.connect(out); return g; }
+
+function ensure(id){
+  const s=state[id]; if(s.built) return; s.built=true;
+  s.gain=ctx.createGain(); s.gain.gain.value=0; s.gain.connect(master); BUILDERS[id](s.gain);
+}
+function apply(id){
+  const s=state[id]; if(!ctx) return; if(s.vol>0) ensure(id);
+  if(s.gain) s.gain.gain.setTargetAtTime(s.vol, ctx.currentTime, .4);
+}
+function initAudio(){
+  if(ctx) return; ctx=new (window.AudioContext||window.webkitAudioContext)();
+  master=ctx.createGain(); master.gain.value=+document.getElementById('master').value;
+  const comp=ctx.createDynamicsCompressor(); master.connect(comp).connect(ctx.destination);
+}
+
+// UI
+const grid=document.getElementById('grid');
+SOUNDS.forEach(s=>{
+  state[s.id]={vol:0};
+  const el=document.createElement('div'); el.className='card'; el.id='c-'+s.id;
+  el.innerHTML=`<div class="ico">${s.ico}</div><div class="name">${s.name}</div><input type="range" min="0" max="1" step="0.01" value="0">`;
+  const r=el.querySelector('input');
+  r.addEventListener('click',e=>e.stopPropagation());
+  r.addEventListener('input',()=>setVol(s.id,+r.value));
+  el.addEventListener('click',()=>setVol(s.id, state[s.id].vol>0?0:.6));
+  grid.appendChild(el);
+});
+function setVol(id,v){
+  state[id].vol=v; const el=document.getElementById('c-'+id); el.querySelector('input').value=v; el.classList.toggle('on',v>0);
+  if(v>0){ const s=SOUNDS.find(x=>x.id===id); document.getElementById('bg').style.background=s.bg; lastFx=s.fx; if(!playing) start(); }
+  apply(id); save();
+}
+function start(){ initAudio(); ctx.resume(); playing=true; document.getElementById('play').textContent='⏸ إيقاف';
+  if(!SOUNDS.some(s=>state[s.id].vol>0)) setVol('rain',.6); SOUNDS.forEach(s=>apply(s.id)); startTimer(); }
+function stop(){ if(ctx) ctx.suspend(); playing=false; document.getElementById('play').textContent='▶ تشغيل'; clearInterval(tInt); document.getElementById('left').textContent=''; }
+document.getElementById('play').onclick=()=>playing?stop():start();
+document.getElementById('master').oninput=e=>{ if(master) master.gain.setTargetAtTime(+e.target.value,ctx.currentTime,.1); };
+document.getElementById('preset').onchange=e=>{ if(!e.target.value) return; SOUNDS.forEach(s=>setVol(s.id,0));
+  e.target.value.split(',').forEach(p=>{const [id,v]=p.split(':'); setVol(id,+v);}); e.target.value=''; };
+let tInt, tEnd=0;
+function startTimer(){ clearInterval(tInt); const m=+document.getElementById('timer').value; const L=document.getElementById('left');
+  if(!m||!playing){ L.textContent=''; return; } tEnd=Date.now()+m*60000;
+  tInt=setInterval(()=>{ const r=tEnd-Date.now(); if(r<=0){ stop(); return; } L.textContent=`⏳ ${Math.floor(r/60000)}:${String(Math.floor(r/1000)%60).padStart(2,'0')}`; },1000); }
+document.getElementById('timer').onchange=startTimer;
+document.addEventListener('keydown',e=>{ if(e.code==='Space'&&e.target.tagName!=='INPUT'){ e.preventDefault(); playing?stop():start(); } });
+function save(){ try{ localStorage.setItem('nature-mix',JSON.stringify(Object.fromEntries(SOUNDS.map(s=>[s.id,state[s.id].vol])))); }catch(e){} }
+try{ const m=JSON.parse(localStorage.getItem('nature-mix')||'{}'); for(const k in m) if(state[k]&&m[k]>0){ state[k].vol=m[k]; const el=document.getElementById('c-'+k); el.querySelector('input').value=m[k]; el.classList.add('on'); document.getElementById('bg').style.background=SOUNDS.find(s=>s.id===k).bg; lastFx=SOUNDS.find(s=>s.id===k).fx; } }catch(e){}
+if(!document.getElementById('bg').style.background) document.getElementById('bg').style.background=SOUNDS[4].bg;
+
+// Visual particles
+const cv=document.getElementById('fx'), g2=cv.getContext('2d'); let W,H,parts=[], flashA=0;
+function resize(){ W=cv.width=innerWidth; H=cv.height=innerHeight; } addEventListener('resize',resize); resize();
+function flash(){ flashA=.6; }
+function spawn(){ const t=lastFx, p={x:Math.random()*W,y:t==='embers'||t==='bubbles'?H+10:-10,t};
+  if(t==='rain'){ p.vy=12+Math.random()*8; p.vx=-1; p.l=10+Math.random()*10; }
+  else if(t==='embers'){ p.vy=-(1+Math.random()*2); p.vx=Math.random()-.5; p.r=1+Math.random()*2; }
+  else if(t==='bubbles'){ p.vy=-(.5+Math.random()); p.vx=Math.random()-.5; p.r=2+Math.random()*5; }
+  else if(t==='leaves'){ p.vy=1+Math.random(); p.vx=1+Math.random()*2; p.r=3+Math.random()*3; p.x=Math.random()*W-100; }
+  else { p.y=Math.random()*H; p.vy=0; p.vx=0; p.r=Math.random()*1.5; p.life=200; p.tw=Math.random()*6; }
+  parts.push(p); }
+function frame(){
+  g2.clearRect(0,0,W,H); const target=lastFx==='rain'?220:lastFx==='stars'?120:60;
+  if(parts.length<target) for(let i=0;i<4;i++) spawn();
+  parts=parts.filter(p=>{ p.x+=p.vx; p.y+=p.vy;
+    if(p.t==='rain'){ g2.strokeStyle='rgba(200,220,255,.35)'; g2.beginPath(); g2.moveTo(p.x,p.y); g2.lineTo(p.x+p.vx*2,p.y+p.l); g2.stroke(); }
+    else if(p.t==='embers'){ g2.fillStyle=`rgba(255,${120+Math.random()*80|0},40,.8)`; g2.beginPath(); g2.arc(p.x,p.y,p.r,0,7); g2.fill(); }
+    else if(p.t==='bubbles'){ g2.strokeStyle='rgba(255,255,255,.3)'; g2.beginPath(); g2.arc(p.x,p.y,p.r,0,7); g2.stroke(); }
+    else if(p.t==='leaves'){ g2.fillStyle='rgba(180,220,140,.45)'; g2.beginPath(); g2.ellipse(p.x,p.y,p.r*2,p.r,p.x/40,0,7); g2.fill(); }
+    else { p.tw+=.05; p.life--; g2.fillStyle=`rgba(255,255,255,${.3+.3*Math.sin(p.tw)})`; g2.beginPath(); g2.arc(p.x,p.y,p.r,0,7); g2.fill(); return p.life>0; }
+    return p.y<H+30&&p.y>-30&&p.x<W+120&&p.t===lastFx; });
+  if(flashA>0){ g2.fillStyle=`rgba(230,235,255,${flashA})`; g2.fillRect(0,0,W,H); flashA-=.04; }
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>
