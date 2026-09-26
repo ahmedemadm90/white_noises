@@ -26,6 +26,14 @@
   .card .name { font-weight:700; margin:4px 0 10px; }
   input[type=range] { width:100%; accent-color:var(--accent); }
   .timer { opacity:.9; }
+  .window { position:relative; max-width:640px; margin:0 auto 22px; padding:14px; border-radius:14px 14px 8px 8px;
+    background:linear-gradient(#6b4a2f,#4a3220); box-shadow:0 20px 50px rgba(0,0,0,.5), inset 0 2px 0 rgba(255,255,255,.15); }
+  .window canvas { display:block; width:100%; aspect-ratio:16/10; border-radius:4px; background:#223; }
+  .window::before, .window::after { content:''; position:absolute; background:#5a3e27; box-shadow:0 0 4px rgba(0,0,0,.5); pointer-events:none; }
+  .window::before { left:50%; top:14px; bottom:14px; width:8px; transform:translateX(-50%); }
+  .window::after { top:50%; left:14px; right:14px; height:8px; transform:translateY(-50%); }
+  .sill { position:absolute; left:-18px; right:-18px; bottom:-14px; height:14px; background:#3d2a1a; border-radius:3px; }
+  .wlabel { position:absolute; top:22px; right:24px; z-index:2; background:rgba(0,0,0,.45); padding:2px 12px; border-radius:999px; font-size:.9rem; }
   footer { text-align:center; opacity:.6; font-size:.85rem; margin-top:28px; }
 </style>
 </head>
@@ -56,6 +64,7 @@
     </select>
     <span id="left"></span>
   </div>
+  <div class="window"><span class="wlabel" id="wlabel"></span><canvas id="scene" width="960" height="600"></canvas><div class="sill"></div></div>
   <div class="grid" id="grid"></div>
   <footer>جميع الأصوات مولّدة داخل المتصفح بواسطة Web Audio — لا تحتاج إنترنت بعد التحميل.</footer>
 </main>
@@ -177,7 +186,7 @@ SOUNDS.forEach(s=>{
 });
 function setVol(id,v){
   state[id].vol=v; const el=document.getElementById('c-'+id); el.querySelector('input').value=v; el.classList.toggle('on',v>0);
-  if(v>0){ const s=SOUNDS.find(x=>x.id===id); document.getElementById('bg').style.background=s.bg; lastFx=s.fx; if(!playing) start(); }
+  if(v>0){ const s=SOUNDS.find(x=>x.id===id); document.getElementById('bg').style.background=s.bg; lastFx=s.fx; setScene(id); if(!playing) start(); }
   apply(id); save();
 }
 function start(){ initAudio(); ctx.resume(); playing=true; document.getElementById('play').textContent='⏸ إيقاف';
@@ -194,7 +203,7 @@ function startTimer(){ clearInterval(tInt); const m=+document.getElementById('ti
 document.getElementById('timer').onchange=startTimer;
 document.addEventListener('keydown',e=>{ if(e.code==='Space'&&e.target.tagName!=='INPUT'){ e.preventDefault(); playing?stop():start(); } });
 function save(){ try{ localStorage.setItem('nature-mix',JSON.stringify(Object.fromEntries(SOUNDS.map(s=>[s.id,state[s.id].vol])))); }catch(e){} }
-try{ const m=JSON.parse(localStorage.getItem('nature-mix')||'{}'); for(const k in m) if(state[k]&&m[k]>0){ state[k].vol=m[k]; const el=document.getElementById('c-'+k); el.querySelector('input').value=m[k]; el.classList.add('on'); document.getElementById('bg').style.background=SOUNDS.find(s=>s.id===k).bg; lastFx=SOUNDS.find(s=>s.id===k).fx; } }catch(e){}
+try{ const m=JSON.parse(localStorage.getItem('nature-mix')||'{}'); for(const k in m) if(state[k]&&m[k]>0){ state[k].vol=m[k]; const el=document.getElementById('c-'+k); el.querySelector('input').value=m[k]; el.classList.add('on'); document.getElementById('bg').style.background=SOUNDS.find(s=>s.id===k).bg; lastFx=SOUNDS.find(s=>s.id===k).fx; sceneId=k; } }catch(e){}
 if(!document.getElementById('bg').style.background) document.getElementById('bg').style.background=SOUNDS[4].bg;
 
 // Visual particles
@@ -222,6 +231,58 @@ function frame(){
   requestAnimationFrame(frame);
 }
 frame();
+// Window scene: a painted nature view that follows the selected sound
+const sc=document.getElementById('scene'), S=sc.getContext('2d'), SW=960, SH=600;
+let sceneId='stream', st=0, flashS=0;
+function setScene(id){ sceneId=id; document.getElementById('wlabel').textContent=SOUNDS.find(s=>s.id===id).ico+' '+SOUNDS.find(s=>s.id===id).name; }
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const STARS=[...Array(140)].map(()=>[rnd(0,SW),rnd(0,SH*.6),rnd(.5,1.8),rnd(0,6)]);
+const DROPS=[...Array(260)].map(()=>[rnd(0,SW),rnd(0,SH),rnd(14,24)]);
+const GLASS=[...Array(40)].map(()=>[rnd(0,SW),rnd(0,SH),rnd(3,8),rnd(.2,1.2)]);
+const FLIES=[...Array(25)].map(()=>[rnd(0,SW),rnd(SH*.5,SH),rnd(0,6)]);
+const GRASS=[...Array(220)].map(()=>[rnd(0,SW),rnd(30,80),rnd(0,6)]);
+const BIRDS=[...Array(7)].map(()=>[rnd(-SW,SW),rnd(60,260),rnd(.8,1.6),rnd(0,6)]);
+const TREES=[...Array(14)].map((_,i)=>[i*75+rnd(-20,20),rnd(120,200)]);
+function sky(a,b){ const g=S.createLinearGradient(0,0,0,SH); g.addColorStop(0,a); g.addColorStop(1,b); S.fillStyle=g; S.fillRect(0,0,SW,SH); }
+function hills(y,amp,col,seed){ S.fillStyle=col; S.beginPath(); S.moveTo(0,SH); for(let x=0;x<=SW;x+=20) S.lineTo(x,y+Math.sin(x/140+seed)*amp+Math.sin(x/53+seed*2)*amp*.3); S.lineTo(SW,SH); S.fill(); }
+function pine(x,base,h,col){ S.fillStyle=col; S.beginPath(); S.moveTo(x,base-h); S.lineTo(x-h*.28,base); S.lineTo(x+h*.28,base); S.fill(); }
+function circle(x,y,r,c){ S.fillStyle=c; S.beginPath(); S.arc(x,y,r,0,7); S.fill(); }
+function stars(a){ STARS.forEach(s=>{ S.globalAlpha=a*(.5+.5*Math.sin(st*2+s[3])); circle(s[0],s[1],s[2],'#fff'); }); S.globalAlpha=1; }
+function rainFall(c){ S.strokeStyle=c; S.lineWidth=1.3; S.beginPath(); DROPS.forEach(d=>{ d[1]+=d[2]; d[0]-=2; if(d[1]>SH){d[1]=-20;d[0]=rnd(0,SW+100);} S.moveTo(d[0],d[1]); S.lineTo(d[0]-3,d[1]+d[2]); }); S.stroke(); }
+function glass(){ GLASS.forEach(g=>{ g[1]+=g[3]; if(g[1]>SH){g[1]=-10;g[0]=rnd(0,SW);} circle(g[0],g[1],g[2],'rgba(200,220,255,.18)'); circle(g[0]-g[2]*.3,g[1]-g[2]*.3,g[2]*.3,'rgba(255,255,255,.35)'); }); }
+const SCENES={
+  rain(){ sky('#3b4654','#6b7785'); hills(360,30,'#48535c',1); hills(420,25,'#343e45',3); TREES.forEach(t=>pine(t[0],470,t[1]*.8,'#232b30')); S.fillStyle='#1f262a'; S.fillRect(0,470,SW,SH); rainFall('rgba(210,225,240,.45)'); glass(); },
+  thunder(){ sky('#11131d','#2c3040'); hills(380,30,'#1c2029',2); TREES.forEach(t=>pine(t[0],480,t[1]*.8,'#0e1116')); S.fillStyle='#0b0d12'; S.fillRect(0,480,SW,SH);
+    if(Math.random()<.004) flashS=1; if(flashS>0){ S.strokeStyle=`rgba(230,235,255,${flashS})`; S.lineWidth=3; S.beginPath(); let x=rnd(200,760),y=0; S.moveTo(x,y); while(y<380){ x+=rnd(-40,40); y+=rnd(30,60); S.lineTo(x,y);} S.stroke(); S.fillStyle=`rgba(220,225,255,${flashS*.4})`; S.fillRect(0,0,SW,SH); flashS-=.06; }
+    rainFall('rgba(200,210,235,.4)'); glass(); },
+  waves(){ sky('#7fc8e8','#f6e2b8'); circle(720,170,55,'#fff3c4'); S.globalAlpha=.25; circle(720,170,90,'#fff3c4'); S.globalAlpha=1;
+    for(let i=0;i<6;i++){ const y=300+i*40; S.fillStyle=`hsl(195,${60-i*4}%,${45-i*4}%)`; S.beginPath(); S.moveTo(0,SH); for(let x=0;x<=SW;x+=10) S.lineTo(x,y+Math.sin(x/60+st*(1+i*.3)+i)*(4+i*2)); S.lineTo(SW,SH); S.fill(); }
+    const sh=520+Math.sin(st*.6)*25; S.fillStyle='#e9d3a1'; S.beginPath(); S.moveTo(0,SH); for(let x=0;x<=SW;x+=20) S.lineTo(x,sh+Math.sin(x/90)*10); S.lineTo(SW,SH); S.fill();
+    S.strokeStyle='rgba(255,255,255,.8)'; S.lineWidth=3; S.beginPath(); for(let x=0;x<=SW;x+=20) S.lineTo(x,sh+Math.sin(x/90)*10); S.stroke(); },
+  wind(){ sky('#9cc3d8','#dfe9d0'); [[200,90],[600,130],[850,70]].forEach(([x,y],i)=>{ const cx=(x+st*20*(i+1))%(SW+300)-150; [0,40,80].forEach(o=>circle(cx+o,y+(o==40?-15:0),35,'rgba(255,255,255,.85)')); });
+    hills(360,40,'#8fae6b',1); hills(420,30,'#6f9150',4); S.strokeStyle='#557a38'; S.lineWidth=2; S.beginPath();
+    GRASS.forEach(g=>{ const b=Math.sin(st*1.8+g[0]/80)*18; S.moveTo(g[0],SH); S.quadraticCurveTo(g[0]+b*.4,SH-g[1]*.6,g[0]+b,SH-g[1]); }); S.stroke(); },
+  stream(){ sky('#a8d5c2','#e8f1d8'); hills(300,30,'#4f7d5a',2); TREES.forEach(t=>pine(t[0],380,t[1],'#2f5a3e')); S.fillStyle='#4c7a3c'; S.fillRect(0,380,SW,SH);
+    S.fillStyle='#4f9fb8'; S.beginPath(); S.moveTo(420,380); S.bezierCurveTo(380,450,600,500,300,SH); S.lineTo(700,SH); S.bezierCurveTo(820,500,520,450,540,380); S.fill();
+    S.strokeStyle='rgba(255,255,255,.55)'; S.lineWidth=2; for(let i=0;i<14;i++){ const t=((st*.25+i/14)%1), y=380+t*220, x=480+Math.sin(t*5+i)*(40+t*120); S.beginPath(); S.moveTo(x-10-t*20,y); S.lineTo(x+10+t*20,y); S.stroke(); }
+    [[250,520,30],[720,540,40],[640,470,18]].forEach(r=>{ S.fillStyle='#7d8580'; S.beginPath(); S.ellipse(r[0],r[1],r[2]*1.4,r[2],0,0,7); S.fill(); }); },
+  birds(){ sky('#f9c78a','#fde9c8'); circle(250,330,70,'#ffdf9e'); hills(330,35,'#9bb56b',0); hills(400,30,'#6f9147',2);
+    [[120,400],[830,420]].forEach(([x,b])=>{ S.fillStyle='#5b3d24'; S.fillRect(x-8,b-120,16,120); circle(x,b-150,70,'#4d7a34'); circle(x-45,b-120,50,'#58883b'); circle(x+45,b-120,50,'#58883b'); });
+    S.strokeStyle='#3a2a20'; S.lineWidth=2.5; BIRDS.forEach(b=>{ b[0]+=b[2]; if(b[0]>SW+40){b[0]=-40;b[1]=rnd(60,260);} const f=Math.sin(st*8+b[3])*8; S.beginPath(); S.moveTo(b[0]-14,b[1]-f); S.quadraticCurveTo(b[0]-6,b[1]-6,b[0],b[1]); S.quadraticCurveTo(b[0]+6,b[1]-6,b[0]+14,b[1]-f); S.stroke(); }); },
+  fire(){ sky('#0a0c1c','#241a2a'); stars(.8); TREES.forEach(t=>pine(t[0],430,t[1]*1.1,'#070810')); S.fillStyle='#120d0c'; S.fillRect(0,430,SW,SH);
+    const cx=300,cy=500, g=S.createRadialGradient(cx,cy,10,cx,cy,300); g.addColorStop(0,'rgba(255,140,40,.45)'); g.addColorStop(1,'rgba(255,100,20,0)'); S.fillStyle=g; S.fillRect(0,0,SW,SH);
+    S.fillStyle='#3a2415'; S.save(); S.translate(cx,cy+20); [-.35,.35].forEach(a=>{ S.save(); S.rotate(a); S.fillRect(-80,-9,160,18); S.restore(); }); S.restore();
+    for(let i=0;i<5;i++){ const h=90+Math.sin(st*7+i*2)*25, w=26+i*4; S.fillStyle=['#ffcf4a','#ff9a2e','#ff6a1a','#e8431a','#ffe08a'][i]; S.globalAlpha=.75; S.beginPath(); S.moveTo(cx-w,cy+10); S.quadraticCurveTo(cx-w*.6+Math.sin(st*5+i)*8,cy-h*.6,cx+Math.sin(st*6+i)*10,cy-h); S.quadraticCurveTo(cx+w*.6,cy-h*.5,cx+w,cy+10); S.fill(); } S.globalAlpha=1;
+    FLIES.slice(0,12).forEach((e,i)=>{ const t=(st*.4+i/12)%1; circle(cx+Math.sin(t*9+i)*30,cy-40-t*260,2*(1-t)+.5,`rgba(255,170,60,${1-t})`); }); },
+  night(){ sky('#050a24','#18264f'); stars(1); circle(740,130,45,'#f4f1dc'); circle(760,120,45,'#050a24'); hills(380,30,'#0c1430',1); TREES.forEach(t=>pine(t[0],460,t[1],'#060b1c')); S.fillStyle='#070c1d'; S.fillRect(0,460,SW,SH);
+    FLIES.forEach(f=>{ const x=f[0]+Math.sin(st*.7+f[2])*30, y=f[1]+Math.cos(st*.5+f[2])*20, a=.5+.5*Math.sin(st*3+f[2]); circle(x,y,6,`rgba(210,255,120,${a*.25})`); circle(x,y,2,`rgba(230,255,160,${a})`); }); },
+  white(){ const g=S.createLinearGradient(0,0,SW,SH); g.addColorStop(0,'#cfd6dc'); g.addColorStop(1,'#8b959e'); S.fillStyle=g; S.fillRect(0,0,SW,SH);
+    for(let i=0;i<5;i++){ S.fillStyle='rgba(255,255,255,.18)'; S.beginPath(); S.ellipse((i*260+st*15)%(SW+400)-200,150+i*90,260,50,0,0,7); S.fill(); } hills(470,20,'rgba(90,100,110,.5)',2); },
+  brown(){ sky('#8a6a4c','#3d2b1e'); for(let i=0;i<4;i++) hills(300+i*70,30-i*4,`hsl(28,${30+i*5}%,${38-i*7}%)`,i*1.7); circle(480,260,60,'rgba(255,220,170,.35)'); },
+};
+function drawScene(){ st+=1/60; (SCENES[sceneId]||SCENES.stream)(); S.fillStyle='rgba(255,255,255,.05)'; S.beginPath(); S.moveTo(0,0); S.lineTo(SW*.35,0); S.lineTo(0,SH*.5); S.fill(); requestAnimationFrame(drawScene); }
+setScene(sceneId); drawScene();
+
 </script>
 </body>
 </html>
