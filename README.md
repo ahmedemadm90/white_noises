@@ -15,4 +15,4 @@
 https://ahmedemadm90.github.io/white_noises/
 
 ## التشغيل
-افتح `index.html` في المتصفح، أو فعّل **GitHub Pages** من إعدادات المستودع (Settings → Pages → Source: GitHub Actions).
+افتح `index.html` في المتصفح، أو فعّل **GitHub Pages** من إعدادات المستودع (Settings → Pages → Deploy from a branch → gh-pages / root).
